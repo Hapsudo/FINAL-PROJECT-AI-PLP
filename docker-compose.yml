@@ -1,0 +1,228 @@
+version: '3.8'
+
+services:
+  # Backend API Service
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: agriwise-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://agriwise_user:agriwise_password@postgres:5432/agriwise_db
+      - REDIS_URL=redis://redis:6379
+      - SECRET_KEY=your-secret-key-here
+      - ALGORITHM=HS256
+      - ACCESS_TOKEN_EXPIRE_MINUTES=30
+      - ENVIRONMENT=production
+    depends_on:
+      - postgres
+      - redis
+    volumes:
+      - ./backend:/app
+      - model_cache:/app/models
+    networks:
+      - agriwise-network
+    restart: unless-stopped
+
+  # Frontend Mobile App (Development)
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: agriwise-frontend
+    ports:
+      - "19000:19000"
+      - "19001:19001"
+      - "19002:19002"
+    environment:
+      - REACT_NATIVE_PACKAGER_HOSTNAME=localhost
+      - EXPO_DEVTOOLS_LISTEN_ADDRESS=0.0.0.0
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    networks:
+      - agriwise-network
+    restart: unless-stopped
+
+  # Web Dashboard
+  web-dashboard:
+    build:
+      context: ./web-dashboard
+      dockerfile: Dockerfile
+    container_name: agriwise-web
+    ports:
+      - "3000:3000"
+    environment:
+      - REACT_APP_API_URL=http://localhost:8000
+      - REACT_APP_ENVIRONMENT=production
+    depends_on:
+      - backend
+    volumes:
+      - ./web-dashboard:/app
+      - /app/node_modules
+    networks:
+      - agriwise-network
+    restart: unless-stopped
+
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: agriwise-postgres
+    environment:
+      - POSTGRES_DB=agriwise_db
+      - POSTGRES_USER=agriwise_user
+      - POSTGRES_PASSWORD=agriwise_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - agriwise-network
+    restart: unless-stopped
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: agriwise-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - agriwise-network
+    restart: unless-stopped
+
+  # Celery Worker for Background Tasks
+  celery-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: agriwise-celery-worker
+    command: celery -A app.core.celery worker --loglevel=info
+    environment:
+      - DATABASE_URL=postgresql://agriwise_user:agriwise_password@postgres:5432/agriwise_db
+      - REDIS_URL=redis://redis:6379
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    depends_on:
+      - postgres
+      - redis
+    volumes:
+      - ./backend:/app
+      - model_cache:/app/models
+    networks:
+      - agriwise-network
+    restart: unless-stopped
+
+  # Celery Beat for Scheduled Tasks
+  celery-beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: agriwise-celery-beat
+    command: celery -A app.core.celery beat --loglevel=info
+    environment:
+      - DATABASE_URL=postgresql://agriwise_user:agriwise_password@postgres:5432/agriwise_db
+      - REDIS_URL=redis://redis:6379
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    depends_on:
+      - postgres
+      - redis
+    volumes:
+      - ./backend:/app
+    networks:
+      - agriwise-network
+    restart: unless-stopped
+
+  # Nginx Reverse Proxy
+  nginx:
+    image: nginx:alpine
+    container_name: agriwise-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
+      - ./nginx/ssl:/etc/nginx/ssl
+      - static_files:/var/www/static
+    depends_on:
+      - backend
+      - web-dashboard
+    networks:
+      - agriwise-network
+    restart: unless-stopped
+
+  # Monitoring with Prometheus
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: agriwise-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    networks:
+      - agriwise-network
+    restart: unless-stopped
+
+  # Grafana for Visualization
+  grafana:
+    image: grafana/grafana:latest
+    container_name: agriwise-grafana
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=agriwise_admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources
+    depends_on:
+      - prometheus
+    networks:
+      - agriwise-network
+    restart: unless-stopped
+
+  # MLflow for Model Tracking
+  mlflow:
+    image: python:3.9-slim
+    container_name: agriwise-mlflow
+    ports:
+      - "5000:5000"
+    environment:
+      - MLFLOW_TRACKING_URI=sqlite:///mlflow.db
+    volumes:
+      - ./mlflow:/mlflow
+      - model_cache:/app/models
+    working_dir: /mlflow
+    command: >
+      sh -c "pip install mlflow &&
+             mlflow server --host 0.0.0.0 --port 5000 --backend-store-uri sqlite:///mlflow.db"
+    networks:
+      - agriwise-network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  model_cache:
+    driver: local
+  static_files:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+
+networks:
+  agriwise-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16 

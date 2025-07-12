@@ -1,0 +1,60 @@
+{
+  "name": "agriwise-ai",
+  "version": "1.0.0",
+  "description": "AI-Powered Agricultural Intelligence Platform for Kenyan Farmers",
+  "main": "index.js",
+  "scripts": {
+    "dev:mobile": "cd frontend && npm start",
+    "dev:web": "cd web-dashboard && npm start",
+    "dev:backend": "cd backend && uvicorn main:app --reload",
+    "build:mobile": "cd frontend && npm run build",
+    "build:web": "cd web-dashboard && npm run build",
+    "test": "npm run test:mobile && npm run test:web && npm run test:backend",
+    "test:mobile": "cd frontend && npm test",
+    "test:web": "cd web-dashboard && npm test",
+    "test:backend": "cd backend && pytest",
+    "install:all": "npm install && cd frontend && npm install && cd ../web-dashboard && npm install && cd ../backend && pip install -r requirements.txt",
+    "docker:build": "docker-compose build",
+    "docker:up": "docker-compose up -d",
+    "docker:down": "docker-compose down",
+    "lint": "npm run lint:mobile && npm run lint:web && npm run lint:backend",
+    "lint:mobile": "cd frontend && npm run lint",
+    "lint:web": "cd web-dashboard && npm run lint",
+    "lint:backend": "cd backend && flake8 ."
+  },
+  "keywords": [
+    "agriculture",
+    "ai",
+    "machine-learning",
+    "kenya",
+    "farming",
+    "sustainable-development",
+    "react-native",
+    "fastapi",
+    "tensorflow"
+  ],
+  "author": "AGRIWISE AI Team",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-username/agriwise-ai.git"
+  },
+  "bugs": {
+    "url": "https://github.com/your-username/agriwise-ai/issues"
+  },
+  "homepage": "https://agriwise-ai.com",
+  "engines": {
+    "node": ">=16.0.0",
+    "npm": ">=8.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^18.0.0",
+    "typescript": "^4.9.0",
+    "prettier": "^2.8.0",
+    "eslint": "^8.0.0"
+  },
+  "workspaces": [
+    "frontend",
+    "web-dashboard"
+  ]
+} 
